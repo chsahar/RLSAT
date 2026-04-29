@@ -1,0 +1,245 @@
+:root {
+  color: #1b1f24;
+  background: #f5f7f8;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.topbar {
+  align-items: center;
+  border-bottom: 1px solid #d8dde1;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+}
+
+.eyebrow {
+  color: #66717f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+.workspace-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(320px, 0.9fr);
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #dce1e5;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.config-panel {
+  grid-row: span 2;
+}
+
+.panel-heading {
+  align-items: center;
+  color: #202833;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+label {
+  color: #505b67;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+input,
+select {
+  background: #fbfcfd;
+  border: 1px solid #cbd3da;
+  border-radius: 6px;
+  color: #12171d;
+  min-height: 40px;
+  outline: none;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+input:focus,
+select:focus {
+  border-color: #2f7d6d;
+  box-shadow: 0 0 0 3px rgba(47, 125, 109, 0.14);
+}
+
+.form-grid,
+.reward-grid,
+.metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reward-grid {
+  border-top: 1px solid #e3e7ea;
+  margin-top: 6px;
+  padding-top: 14px;
+}
+
+.primary-button,
+.secondary-button,
+.icon-button {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 14px;
+}
+
+.primary-button {
+  background: #256f60;
+  color: #ffffff;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.secondary-button {
+  background: #23303d;
+  color: #ffffff;
+  width: 100%;
+}
+
+.icon-button {
+  background: #ffffff;
+  border: 1px solid #ccd4db;
+  color: #24313f;
+}
+
+.progress-track {
+  background: #e7ebef;
+  border-radius: 999px;
+  height: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: #2f7d6d;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.metric {
+  background: #f7f9fa;
+  border: 1px solid #e1e6ea;
+  border-radius: 6px;
+  min-height: 72px;
+  padding: 10px;
+}
+
+.metric-wide {
+  grid-column: 1 / -1;
+}
+
+.metric span {
+  color: #65717f;
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  color: #151b22;
+  display: block;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice {
+  background: #fff2d7;
+  border: 1px solid #e5bd62;
+  border-radius: 8px;
+  color: #5b3e05;
+  font-weight: 700;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-grid,
+  .form-grid,
+  .reward-grid,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .config-panel {
+    grid-row: auto;
+  }
+}

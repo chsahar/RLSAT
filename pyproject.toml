@@ -1,0 +1,20 @@
+[project]
+name = "saharsat"
+version = "0.1.0"
+description = "A small Stable-Baselines3 PPO setup for learning SAT branching policies."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "gymnasium>=0.29.1",
+    "numpy>=1.24",
+    "stable-baselines3>=2.3.0",
+    "uvicorn[standard]>=0.27",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
