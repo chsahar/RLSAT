@@ -1,0 +1,126 @@
+\documentclass{article}
+
+% NeurIPS 2026 style
+% 0. "default" for submission (double-blind)
+\usepackage{neurips_2026}
+
+% For preprint (arXiv), uncomment below and comment out the line above:
+% \usepackage[preprint]{neurips_2026}
+
+% For camera-ready after acceptance:
+% \usepackage[main, final]{neurips_2026}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{amsmath}
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+\title{Learning SAT Variable Assignment Policies via\\Proximal Policy Optimization with Curriculum Learning}
+
+\author{%
+  Sahar Chreif \\
+  \And
+  Mohamed Moslemani \\
+  \And
+  Hasan Abbani \\
+  \And
+  Jad Seifeddine \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Boolean Satisfiability Problem (SAT) is the canonical NP-complete problem and lies at the heart of formal verification, planning, and combinatorial optimization. Modern conflict-driven clause learning (CDCL) solvers rely on carefully engineered heuristics---such as VSIDS and phase saving---to guide variable selection and value assignment. In this work, we investigate whether a reinforcement learning agent can discover effective branching strategies directly from data, without hand-crafted heuristics. We formulate SAT solving as a sequential decision process over the SATLIB \texttt{uf20-91} benchmark and train a Proximal Policy Optimization (PPO) agent with three progressive improvements: a shaped reward signal that provides dense per-step feedback through clause proximity and falsification penalties, an enriched observation space encoding structural features such as variable activity, polarity ratios, and clause watch counts, and a curriculum learning strategy that gradually increases problem difficulty. We present an end-to-end system comprising a Gymnasium environment, Stable-Baselines3 training pipeline, FastAPI backend, and React-based monitoring interface, designed to facilitate rapid experimentation and reproducibility.
+\end{abstract}
+
+\section{Introduction}
+
+The Boolean Satisfiability Problem (SAT)---determining whether there exists a truth assignment that satisfies a given propositional formula in conjunctive normal form (CNF)---was the first problem proven to be NP-complete~\cite{cook1971complexity}. Despite its worst-case intractability, SAT solvers have become indispensable tools in hardware verification, software testing, automated planning, and cryptanalysis, routinely solving industrial instances with millions of variables and clauses.
+
+The success of modern SAT solvers owes largely to the conflict-driven clause learning (CDCL) paradigm~\cite{silva1999grasp, moskewicz2001chaff}, which combines systematic search with conflict analysis and non-chronological backtracking. Within this framework, the \emph{branching heuristic}---the policy that selects which variable to assign next and what value to give it---has an outsized impact on solver performance. Heuristics such as VSIDS (Variable State Independent Decaying Sum)~\cite{moskewicz2001chaff} and its variants have been refined over two decades of empirical tuning, yet they remain domain-agnostic: they do not adapt to the structural regularities present in specific problem families.
+
+This observation motivates a natural question: \emph{can a learning-based agent discover branching strategies that exploit distributional structure in SAT instances, potentially outperforming fixed heuristics on specific problem classes?} Recent advances in deep reinforcement learning (RL) have demonstrated that learned policies can match or exceed hand-engineered strategies in domains ranging from game playing~\cite{silver2017mastering} to combinatorial optimization~\cite{bello2016neural, khalil2017learning}. However, applying RL to SAT solving introduces distinct challenges. The action space grows linearly with the number of variables, the reward signal is naturally sparse (a formula is either satisfied or not), and the combinatorial structure of CNF formulas does not map naturally to the fixed-dimensional observations that standard policy networks expect.
+
+In this paper, we address these challenges through three complementary contributions:
+
+\begin{enumerate}
+    \item \textbf{Shaped reward function.} We replace the sparse terminal signal with dense per-step feedback. Our reward decomposes into clause satisfaction bonuses ($+1$ per newly satisfied clause), clause falsification penalties ($-2$ per newly falsified clause, applied at each assignment step rather than only at termination), and a clause proximity component ($+0.3$ per true literal added to an unresolved clause) that grants partial credit when an assignment moves a clause closer to satisfaction. This shaping provides the learning signal needed for PPO to make meaningful gradient updates early in training.
+
+    \item \textbf{Enriched observation space.} We augment the agent's observation beyond raw variable assignments and clause statuses. Our 265-dimensional state representation includes variable activity scores (the count of unresolved clauses each unassigned variable participates in), polarity ratios (the fraction of positive versus negative occurrences of each variable), clause watch counts (the number of unassigned literals remaining per clause), and global progress features. These features are inspired by the information that classical CDCL heuristics implicitly or explicitly maintain, but are presented in a form that a neural policy can learn from.
+
+    \item \textbf{Curriculum learning.} Rather than immediately confronting the agent with full instances, we begin each episode by pre-assigning a subset of variables to their known correct values, leaving only a small number of decisions for the agent. As the agent's solve rate on this reduced problem exceeds a promotion threshold, we progressively decrease the number of pre-assigned variables until the agent faces the complete instance. This curriculum allows the agent to first learn local assignment patterns before tackling global search.
+\end{enumerate}
+
+We evaluate our approach on the SATLIB \texttt{uf20-91} benchmark~\cite{hoos2000satlib}, a collection of 1{,}000 random 3-SAT instances at the phase transition (ratio of clauses to variables $\alpha \approx 4.3$), where instances are known to be satisfiable but maximally difficult for random search. Our experimental infrastructure---comprising a Gymnasium environment, Stable-Baselines3 PPO implementation~\cite{raffin2021stable}, FastAPI server, and React monitoring dashboard---is designed for reproducibility and rapid iteration. We provide detailed evaluation scripts that track solve rates, clause satisfaction distributions, reward decompositions, and per-instance difficulty, enabling principled comparison across ablation conditions.
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work on learning-based approaches to combinatorial optimization and SAT solving. Section~\ref{sec:method} formalizes the SAT assignment problem as a Markov Decision Process and describes our environment, reward shaping, observation design, and curriculum strategy. Section~\ref{sec:experiments} presents experimental results comparing our progressive improvements against baseline agents. Section~\ref{sec:discussion} discusses limitations and directions for future work, including scaling to larger instances and incorporating graph neural network architectures.
+
+\section{Related Work}
+\label{sec:related}
+
+% TODO: Add related work
+
+\section{Method}
+\label{sec:method}
+
+% TODO: Add method
+
+\section{Experiments}
+\label{sec:experiments}
+
+% TODO: Add experiments
+
+\section{Discussion}
+\label{sec:discussion}
+
+% TODO: Add discussion
+
+% Acknowledgments (hidden during anonymous submission, shown in camera-ready)
+\begin{ack}
+% TODO: Add acknowledgments and funding disclosures for camera-ready version.
+\end{ack}
+
+\section*{References}
+
+{
+\small
+
+[1] Cook, S.A. (1971). The complexity of theorem-proving procedures. In \emph{Proceedings of the Third Annual ACM Symposium on Theory of Computing}, pp.\ 151--158.
+
+[2] Marques-Silva, J.P.\ \& Sakallah, K.A. (1999). {GRASP}: A search algorithm for propositional satisfiability. \emph{IEEE Transactions on Computers}, 48(5):506--521.
+
+[3] Moskewicz, M.W., Madigan, C.F., Zhao, Y., Zhang, L.\ \& Malik, S. (2001). Chaff: Engineering an efficient {SAT} solver. In \emph{Proceedings of the 38th Annual Design Automation Conference}, pp.\ 530--535.
+
+[4] Silver, D., Schrittwieser, J., Simonyan, K., Antonoglou, I., Huang, A., Guez, A., Hubert, T., Baker, L., Lai, M., Bolton, A., et al. (2017). Mastering the game of {Go} without human knowledge. \emph{Nature}, 550(7676):354--359.
+
+[5] Bello, I., Pham, H., Le, Q.V., Norouzi, M.\ \& Bengio, S. (2016). Neural combinatorial optimization with reinforcement learning. \emph{arXiv preprint arXiv:1611.09940}.
+
+[6] Khalil, E., Dai, H., Zhang, Y., Dilkina, B.\ \& Song, L. (2017). Learning combinatorial optimization algorithms over graphs. In \emph{Advances in Neural Information Processing Systems}, vol.\ 30.
+
+[7] Hoos, H.H.\ \& St{\"u}tzle, T. (2000). {SATLIB}: An online resource for research on {SAT}. In \emph{SAT 2000}, pp.\ 283--292. IOS Press.
+
+[8] Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M.\ \& Dormann, N. (2021). Stable-{Baselines3}: Reliable reinforcement learning implementations. \emph{Journal of Machine Learning Research}, 22(268):1--8.
+
+[9] Selsam, D., Lamm, M., B{\"u}nz, B., Liang, P., de Moura, L.\ \& Dill, D.L. (2019). Learning a {SAT} solver from single-bit supervision. In \emph{International Conference on Learning Representations}.
+
+[10] Kurin, V., Godil, S., Whiteson, S.\ \& Catanzaro, B. (2020). Can {Q}-learning with graph neural networks learn a generalizable branching heuristic for a {SAT} solver? In \emph{Advances in Neural Information Processing Systems}, vol.\ 33.
+
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\appendix
+
+\section{Technical Appendix}
+
+% TODO: Add supplementary material (additional results, proofs, etc.)
+
+\end{document}

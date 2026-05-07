@@ -1,0 +1,154 @@
+% neurips_2026.sty — Minimal NeurIPS 2026 style file
+% Compatible with the official template structure
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{neurips_2026}[2026/01/01 NeurIPS 2026 style file]
+
+% --- Options ---
+\newif\if@neuripsfinal\@neuripsfinalfalse
+\newif\if@neuripspreprint\@neuripspreprintfalse
+\newif\if@nonatbib\@nonatbibfalse
+\newif\if@main\@mainfalse
+\newif\if@position\@positionfalse
+\newif\if@eandd\@eanddfalse
+\newif\if@creativeai\@creativeaifalse
+\newif\if@sglblindworkshop\@sglblindworkshopfalse
+\newif\if@dblblindworkshop\@dblblindworkshopfalse
+
+\DeclareOption{final}{\@neuripsfinaltrue}
+\DeclareOption{preprint}{\@neuripspreprinttrue}
+\DeclareOption{nonatbib}{\@nonatbibtrue}
+\DeclareOption{main}{\@maintrue}
+\DeclareOption{position}{\@positiontrue}
+\DeclareOption{eandd}{\@eanddtrue}
+\DeclareOption{creativeai}{\@creativeaitrue}
+\DeclareOption{sglblindworkshop}{\@sglblindworkshoptrue}
+\DeclareOption{dblblindworkshop}{\@dblblindworkshoptrue}
+\ProcessOptions\relax
+
+% --- Required packages ---
+\RequirePackage{times}
+\RequirePackage{latexsym}
+\RequirePackage{amsmath}
+\RequirePackage{amssymb}
+\if@nonatbib\else
+  \RequirePackage{natbib}
+\fi
+\RequirePackage{graphicx}
+
+% --- Page layout (NeurIPS standard) ---
+\setlength{\paperwidth}{8.5in}
+\setlength{\paperheight}{11in}
+\setlength{\textwidth}{5.5in}
+\setlength{\textheight}{9.0in}
+\setlength{\oddsidemargin}{0.5in}
+\setlength{\evensidemargin}{0.5in}
+\setlength{\topmargin}{-0.25in}
+\setlength{\headheight}{0in}
+\setlength{\headsep}{0.3in}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0pt}
+
+% --- Title formatting ---
+\def\@maketitle{%
+  \vbox to \headheight{%
+    \vss
+    \vskip 2em
+    \begin{center}%
+      {\LARGE\bfseries \@title \par}%
+      \vskip 1.5em%
+      \if@neuripsfinal
+        {\large
+          \lineskip .5em%
+          \begin{tabular}[t]{c}%
+            \@author
+          \end{tabular}\par}%
+      \else
+        \if@neuripspreprint
+          {\large
+            \lineskip .5em%
+            \begin{tabular}[t]{c}%
+              \@author
+            \end{tabular}\par}%
+        \else
+          {\large Anonymous Author(s)\par}%
+        \fi
+      \fi
+      \vskip 1em%
+      \if@neuripspreprint
+        {\large Preprint. Work in progress.}%
+      \fi
+    \end{center}%
+    \par
+    \vskip 1.5em}%
+}
+
+% --- Abstract formatting ---
+\renewenvironment{abstract}%
+  {\centerline{\large\bfseries Abstract}%
+    \vspace{0.5ex}%
+    \begin{quote}}%
+  {\par\end{quote}\vskip 1ex}
+
+% --- Section formatting ---
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+  {-2.0ex \@plus -0.5ex \@minus -0.2ex}%
+  {1.5ex \@plus 0.3ex \@minus 0.2ex}%
+  {\large\bf\raggedright}}
+
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+  {-1.8ex \@plus -0.5ex \@minus -0.2ex}%
+  {0.8ex \@plus 0.2ex}%
+  {\normalsize\bf\raggedright}}
+
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+  {-1.5ex \@plus -0.5ex \@minus -0.2ex}%
+  {0.5ex \@plus 0.2ex}%
+  {\normalsize\bf\raggedright}}
+
+% --- Author separator commands ---
+\newcommand{\And}{%
+  \end{tabular}\hfil\linebreak[0]\hfil%
+  \begin{tabular}[t]{c}\bfseries}
+
+\newcommand{\AND}{%
+  \end{tabular}\vskip 5pt\par
+  \begin{tabular}[t]{c}\bfseries}
+
+% --- Workshop title command ---
+\newcommand{\workshoptitle}[1]{%
+  \def\@workshoptitle{#1}%
+}
+
+% --- Acknowledgments environment ---
+% Hidden during anonymous submission, shown in camera-ready
+\if@neuripsfinal
+  \newenvironment{ack}{\section*{Acknowledgments}}{}
+\else
+  \if@neuripspreprint
+    \newenvironment{ack}{\section*{Acknowledgments}}{}
+  \else
+    \newsavebox{\ackbox}
+    \newenvironment{ack}{%
+      \begingroup
+      \begin{lrbox}{\ackbox}
+      \begin{minipage}{\textwidth}
+    }{%
+      \end{minipage}
+      \end{lrbox}
+      \endgroup
+    }
+  \fi
+\fi
+
+% --- Line numbers for review (not in final/preprint) ---
+\if@neuripsfinal\else
+  \if@neuripspreprint\else
+    % Line numbers could be added here for review
+  \fi
+\fi
+
+% --- Page numbering ---
+\pagenumbering{arabic}
+
+\endinput

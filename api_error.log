@@ -1,0 +1,7 @@
+INFO:     Will watch for changes in these directories: ['C:\\Users\\Admin\\RLSAT']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [151944] using WatchFiles
+INFO:     Started server process [165580]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src\saharsat\envs_v3.py', 'scripts\train_ppo_v2.py', 'src\saharsat\training_v2.py', 'scripts\compare_evals.py', 'src\saharsat\envs_v2.py', 'scripts\train_ppo_v3.py', 'scripts\train_ppo.py', 'src\saharsat\envs.py', 'src\saharsat\model_io.py', 'scripts\evaluate_agent.py', 'src\saharsat\api.py', 'src\saharsat\__init__.py', 'scripts\check_env.py', 'scripts\train_curriculum.py', 'src\saharsat\training.py', 'scripts\run_api.py', 'src\saharsat\curriculum.py', 'src\saharsat\training_v3.py', 'scripts\evaluate_detailed.py'. Reloading...

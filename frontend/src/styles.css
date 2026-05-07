@@ -73,7 +73,7 @@ h2 {
 .workspace-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(320px, 1.1fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(340px, 1.15fr) minmax(320px, 0.85fr);
 }
 
 .panel {
@@ -134,6 +134,19 @@ select:focus {
   border-top: 1px solid #e3e7ea;
   margin-top: 6px;
   padding-top: 14px;
+}
+
+.toggle-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.toggle-row input {
+  accent-color: #256f60;
+  min-height: auto;
+  width: 18px;
 }
 
 .primary-button,
@@ -210,6 +223,68 @@ select:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.job-row {
+  align-items: center;
+  background: #f7f9fa;
+  border: 1px solid #e1e6ea;
+  border-radius: 6px;
+  color: #17202a;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 58px;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.job-row-active {
+  border-color: #2f7d6d;
+  box-shadow: 0 0 0 3px rgba(47, 125, 109, 0.12);
+}
+
+.job-row strong,
+.job-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-row strong {
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+.job-row small {
+  color: #65717f;
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.empty-state {
+  color: #65717f;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.status-completed {
+  color: #26755d;
+}
+
+.status-failed {
+  color: #b13a3a;
+}
+
+.status-running {
+  color: #516171;
 }
 
 .notice {
