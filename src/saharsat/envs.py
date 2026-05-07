@@ -84,9 +84,30 @@ def load_cnf_directory(data_dir: str | Path) -> list[SATInstance]:
 
 
 class SATBranchingEnv(gym.Env):
-    """Simple SAT assignment environment for fixed-size SATLIB uf20-91 formulas."""
+    """SAT branching environment with unit propagation and rich observations.
+
+    After each agent decision, Boolean Constraint Propagation (BCP) automatically
+    assigns any forced unit-clause literals. The agent only makes real branching
+    decisions — the same split a DPLL solver makes.
+
+    Observation vector (per variable × 2 + per clause + 1):
+      - 20 assignment values:  -1 unassigned, 0 false, 1 true
+      - 20 positive pressure:  fraction of unsatisfied clauses containing +x_i
+      - 20 negative pressure:  fraction of unsatisfied clauses containing -x_i
+      - 91 clause statuses:    -1 falsified, 0 unresolved, 1 satisfied
+      - 91 unresolved counts:  (unresolved literals in clause) / 3, 0 if resolved
+      - 1  progress ratio:     assigned_count / num_vars
+
+    Total observation size: 20 + 20 + 20 + 91 + 91 + 1 = 243
+
+    Compatible with sb3-contrib MaskablePPO via the action_masks() method.
+    """
 
     metadata = {"render_modes": ["human"]}
+
+    OBS_SIZE_PER_INSTANCE = staticmethod(
+        lambda nv, nc: nv + nv + nv + nc + nc + 1
+    )
 
     def __init__(
         self,
@@ -95,8 +116,10 @@ class SATBranchingEnv(gym.Env):
         num_clauses: int = 91,
         max_steps: int | None = None,
         invalid_action_penalty: float = -1.0,
-        solved_bonus: float = 100.0,
-        failed_penalty: float = -100.0,
+        solved_bonus: float = 10.0,
+        failed_penalty: float = -10.0,
+        falsified_clause_penalty: float = -0.5,
+        unit_clause_bonus: float = 2.0,
         seed: int | None = None,
     ) -> None:
         super().__init__()
@@ -106,15 +129,18 @@ class SATBranchingEnv(gym.Env):
         self.invalid_action_penalty = invalid_action_penalty
         self.solved_bonus = solved_bonus
         self.failed_penalty = failed_penalty
+        self.falsified_clause_penalty = falsified_clause_penalty
+        self.unit_clause_bonus = unit_clause_bonus
 
         self.instances = load_cnf_directory(data_dir)
         self._validate_instances()
 
         self.action_space = spaces.Discrete(self.num_vars * 2)
+        obs_dim = self.num_vars * 3 + self.num_clauses * 2 + 1
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(self.num_vars + self.num_clauses,),
+            shape=(obs_dim,),
             dtype=np.float32,
         )
 
@@ -122,9 +148,12 @@ class SATBranchingEnv(gym.Env):
         self.instance: SATInstance | None = None
         self.assignment = np.full(self.num_vars, -1, dtype=np.int8)
         self.clause_statuses = np.zeros(self.num_clauses, dtype=np.int8)
+        self.unresolved_counts = np.zeros(self.num_clauses, dtype=np.int8)
         self.satisfied_count = 0
+        self.falsified_count = 0
         self.steps = 0
         self.assigned_count = 0
+        self.bcp_assignments = 0
 
     def _validate_instances(self) -> None:
         for instance in self.instances:
@@ -138,6 +167,14 @@ class SATBranchingEnv(gym.Env):
                     f"{instance.path} has clause shape {instance.clauses.shape}, "
                     f"expected ({self.num_clauses}, 3)"
                 )
+
+    def action_masks(self) -> np.ndarray:
+        """Boolean mask: only unassigned variables have actions enabled."""
+        var_free = self.assignment == -1
+        mask = np.zeros(self.num_vars * 2, dtype=bool)
+        mask[0::2] = var_free
+        mask[1::2] = var_free
+        return mask
 
     def reset(
         self,
@@ -153,9 +190,12 @@ class SATBranchingEnv(gym.Env):
         self.instance = self.instances[instance_index]
         self.assignment.fill(-1)
         self.clause_statuses.fill(0)
+        self.unresolved_counts.fill(3)
         self.satisfied_count = 0
+        self.falsified_count = 0
         self.steps = 0
         self.assigned_count = 0
+        self.bcp_assignments = 0
 
         info = {
             "instance_path": str(self.instance.path),
@@ -172,6 +212,7 @@ class SATBranchingEnv(gym.Env):
         value = action % 2
         reward = 0.0
         old_satisfied = self.satisfied_count
+        old_falsified = self.falsified_count
         invalid_action = False
         self.steps += 1
 
@@ -182,10 +223,14 @@ class SATBranchingEnv(gym.Env):
             invalid_action = True
             reward += self.invalid_action_penalty
         else:
-            self.assignment[variable_index] = value
-            self.assigned_count += 1
-            self._update_clause_statuses()
-            reward += float(self.satisfied_count - old_satisfied)
+            self._assign_variable(variable_index, value)
+            self._run_bcp()
+
+            newly_satisfied = self.satisfied_count - old_satisfied
+            newly_falsified = self.falsified_count - old_falsified
+
+            reward += float(newly_satisfied)
+            reward += float(newly_falsified) * self.falsified_clause_penalty
 
         terminated = self.assigned_count >= self.num_vars
         truncated = not terminated and self.steps >= self.max_steps
@@ -197,8 +242,10 @@ class SATBranchingEnv(gym.Env):
         info = {
             "invalid_action": invalid_action,
             "satisfied_clauses": self.satisfied_count,
+            "falsified_clauses": self.falsified_count,
             "all_satisfied": all_satisfied,
             "assigned_variables": self.assigned_count,
+            "bcp_assignments": self.bcp_assignments,
             "instance_path": str(self.instance.path),
         }
         return self._observation(), reward, terminated, truncated, info
@@ -210,19 +257,164 @@ class SATBranchingEnv(gym.Env):
 
         print(
             f"{self.instance.path.name}: "
-            f"{self.satisfied_count}/{self.num_clauses} clauses satisfied, "
-            f"{self.assigned_count}/{self.num_vars} variables assigned"
+            f"{self.satisfied_count}/{self.num_clauses} sat, "
+            f"{self.falsified_count} falsified, "
+            f"{self.assigned_count}/{self.num_vars} assigned "
+            f"({self.bcp_assignments} via BCP)"
         )
+
+    def _assign_variable(self, var_idx: int, value: int) -> None:
+        """Assign a single variable and update clause bookkeeping."""
+        assert self.instance is not None
+        self.assignment[var_idx] = value
+        self.assigned_count += 1
+
+        var_mask = self.instance.variable_indices == var_idx
+        clause_indices = np.where(np.any(var_mask, axis=1))[0]
+
+        for ci in clause_indices:
+            if self.clause_statuses[ci] != 0:
+                continue
+            for k in range(3):
+                if not var_mask[ci, k]:
+                    continue
+                is_positive = bool(self.instance.literal_is_positive[ci, k])
+                lit_true = (value == 1) == is_positive
+                if lit_true:
+                    self.clause_statuses[ci] = 1
+                    self.satisfied_count += 1
+                else:
+                    self.unresolved_counts[ci] -= 1
+                    if self.unresolved_counts[ci] == 0:
+                        self.clause_statuses[ci] = -1
+                        self.falsified_count += 1
+                break
+
+    def _run_bcp(self) -> None:
+        """Unit propagation + pure literal elimination, run to fixpoint.
+
+        Unit propagation: a clause with exactly one unresolved literal forces
+        that literal to be set true.
+
+        Pure literal elimination: a variable that only appears in one polarity
+        across all unsatisfied clauses can be assigned that polarity for free.
+        """
+        assert self.instance is not None
+        changed = True
+        while changed:
+            changed = False
+
+            unit_mask = (self.clause_statuses == 0) & (self.unresolved_counts == 1)
+            unit_clause_indices = np.where(unit_mask)[0]
+
+            for ci in unit_clause_indices:
+                if self.clause_statuses[ci] != 0:
+                    continue
+                for k in range(3):
+                    vi = self.instance.variable_indices[ci, k]
+                    if self.assignment[vi] != -1:
+                        continue
+                    is_positive = bool(self.instance.literal_is_positive[ci, k])
+                    forced_value = 1 if is_positive else 0
+                    self._assign_variable(vi, forced_value)
+                    self.bcp_assignments += 1
+                    changed = True
+                    break
+
+            if changed:
+                continue
+
+            changed = self._run_pure_literal_elimination()
+
+    def _run_pure_literal_elimination(self) -> bool:
+        """Assign variables that appear in only one polarity in unsatisfied clauses."""
+        assert self.instance is not None
+        unsat_mask = self.clause_statuses == 0
+        unsat_indices = np.where(unsat_mask)[0]
+        if len(unsat_indices) == 0:
+            return False
+
+        appears_pos = np.zeros(self.num_vars, dtype=bool)
+        appears_neg = np.zeros(self.num_vars, dtype=bool)
+
+        for ci in unsat_indices:
+            for k in range(3):
+                vi = self.instance.variable_indices[ci, k]
+                if self.assignment[vi] != -1:
+                    continue
+                if self.instance.literal_is_positive[ci, k]:
+                    appears_pos[vi] = True
+                else:
+                    appears_neg[vi] = True
+
+        unassigned = self.assignment == -1
+        pure_pos = unassigned & appears_pos & ~appears_neg
+        pure_neg = unassigned & appears_neg & ~appears_pos
+
+        changed = False
+        for vi in np.where(pure_pos)[0]:
+            if self.assignment[vi] != -1:
+                continue
+            self._assign_variable(int(vi), 1)
+            self.bcp_assignments += 1
+            changed = True
+
+        for vi in np.where(pure_neg)[0]:
+            if self.assignment[vi] != -1:
+                continue
+            self._assign_variable(int(vi), 0)
+            self.bcp_assignments += 1
+            changed = True
+
+        return changed
 
     def _observation(self) -> np.ndarray:
-        return np.concatenate(
-            [
-                self.assignment.astype(np.float32),
-                self.clause_statuses.astype(np.float32),
-            ]
+        assert self.instance is not None
+
+        assign_obs = self.assignment.astype(np.float32)
+
+        pos_pressure = np.zeros(self.num_vars, dtype=np.float32)
+        neg_pressure = np.zeros(self.num_vars, dtype=np.float32)
+
+        unsat_mask = self.clause_statuses == 0
+        n_unsat = max(int(np.count_nonzero(unsat_mask)), 1)
+
+        for ci in np.where(unsat_mask)[0]:
+            for k in range(3):
+                vi = self.instance.variable_indices[ci, k]
+                if self.assignment[vi] != -1:
+                    continue
+                if self.instance.literal_is_positive[ci, k]:
+                    pos_pressure[vi] += 1.0
+                else:
+                    neg_pressure[vi] += 1.0
+
+        pos_pressure /= n_unsat
+        neg_pressure /= n_unsat
+
+        clause_obs = self.clause_statuses.astype(np.float32)
+
+        unresolved_obs = np.where(
+            self.clause_statuses == 0,
+            self.unresolved_counts.astype(np.float32) / 3.0,
+            0.0,
+        ).astype(np.float32)
+
+        progress = np.array(
+            [self.assigned_count / self.num_vars], dtype=np.float32
         )
 
+        return np.concatenate([
+            assign_obs,
+            pos_pressure,
+            neg_pressure,
+            clause_obs,
+            unresolved_obs,
+            progress,
+        ])
+
     def _update_clause_statuses(self) -> None:
+        """Full recompute — only used if needed for debugging."""
         assert self.instance is not None
         assigned_values = self.assignment[self.instance.variable_indices]
         assigned_literals = assigned_values != -1
@@ -238,6 +430,10 @@ class SATBranchingEnv(gym.Env):
         self.clause_statuses[satisfied_clauses] = 1
         self.clause_statuses[falsified_clauses] = -1
         self.satisfied_count = int(np.count_nonzero(satisfied_clauses))
+        self.falsified_count = int(np.count_nonzero(falsified_clauses))
+
+        n_unresolved = np.sum(~assigned_literals, axis=1)
+        self.unresolved_counts = n_unresolved.astype(np.int8)
 
     def _count_satisfied_clauses(self) -> int:
         return self.satisfied_count

@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 
 import numpy as np
-from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO
 
 from saharsat import SATBranchingEnv
 from saharsat.model_io import load_ppo_model
 
 
-def run_episode(model: PPO, env: SATBranchingEnv, seed: int) -> dict:
+def run_episode(model: MaskablePPO, env: SATBranchingEnv, seed: int) -> dict:
     observation, info = env.reset(seed=seed)
     total_reward = 0.0
     terminated = False
@@ -17,7 +17,8 @@ def run_episode(model: PPO, env: SATBranchingEnv, seed: int) -> dict:
     final_info = info
 
     while not (terminated or truncated):
-        action, _ = model.predict(observation, deterministic=True)
+        action_masks = env.action_masks()
+        action, _ = model.predict(observation, deterministic=True, action_masks=action_masks)
         observation, reward, terminated, truncated, final_info = env.step(int(action))
         total_reward += float(reward)
 

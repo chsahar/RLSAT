@@ -6,12 +6,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import torch
-from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO
 
 
-def load_ppo_model(path: str | Path) -> PPO:
+def load_ppo_model(path: str | Path) -> MaskablePPO:
     with seekable_torch_load():
-        return PPO.load(path)
+        return MaskablePPO.load(path)
 
 
 @contextmanager

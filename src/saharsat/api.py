@@ -10,19 +10,21 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO
 
 from saharsat import SATBranchingEnv
 from saharsat.model_io import load_ppo_model
-from saharsat.training import TrainingConfig, TrainingProgress, train_ppo
+from saharsat.training import DEFAULT_N_ENVS, TrainingConfig, TrainingProgress, train_ppo
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class RewardConfig(BaseModel):
     invalid_action_penalty: float = -1.0
-    solved_bonus: float = 100.0
-    failed_penalty: float = -100.0
+    solved_bonus: float = 10.0
+    failed_penalty: float = -10.0
+    falsified_clause_penalty: float = -0.5
+    unit_clause_bonus: float = 2.0
 
 
 class TrainRequest(BaseModel):
@@ -31,9 +33,11 @@ class TrainRequest(BaseModel):
     seed: int = 0
     max_steps: int = Field(default=40, ge=1)
     rewards: RewardConfig = Field(default_factory=RewardConfig)
-    n_steps: int = Field(default=512, ge=1)
-    batch_size: int = Field(default=64, ge=1)
-    gamma: float = Field(default=0.99, gt=0.0, le=1.0)
+    n_steps: int = Field(default=2048, ge=1)
+    batch_size: int = Field(default=128, ge=1)
+    gamma: float = Field(default=1.0, gt=0.0, le=1.0)
+    n_envs: int = Field(default=DEFAULT_N_ENVS, ge=1)
+    lr_decay: bool = True
     model_out: str | None = None
 
 
@@ -152,6 +156,8 @@ def evaluate(request: EvalRequest) -> dict:
         invalid_action_penalty=request.rewards.invalid_action_penalty,
         solved_bonus=request.rewards.solved_bonus,
         failed_penalty=request.rewards.failed_penalty,
+        falsified_clause_penalty=request.rewards.falsified_clause_penalty,
+        unit_clause_bonus=request.rewards.unit_clause_bonus,
         seed=request.seed,
     )
     model_path = resolve_project_path(request.model)
@@ -215,9 +221,13 @@ def _run_training_job(job_id: str, request: TrainRequest) -> None:
                 invalid_action_penalty=request.rewards.invalid_action_penalty,
                 solved_bonus=request.rewards.solved_bonus,
                 failed_penalty=request.rewards.failed_penalty,
+                falsified_clause_penalty=request.rewards.falsified_clause_penalty,
+                unit_clause_bonus=request.rewards.unit_clause_bonus,
                 n_steps=request.n_steps,
                 batch_size=request.batch_size,
                 gamma=request.gamma,
+                n_envs=request.n_envs,
+                lr_decay=request.lr_decay,
                 model_out=(
                     str(resolve_project_path(request.model_out))
                     if request.model_out is not None
@@ -239,7 +249,7 @@ def _run_training_job(job_id: str, request: TrainRequest) -> None:
         job.model_path = str(model_path)
 
 
-def _run_eval_episode(model: PPO, env: SATBranchingEnv, seed: int) -> dict:
+def _run_eval_episode(model: MaskablePPO, env: SATBranchingEnv, seed: int) -> dict:
     observation, info = env.reset(seed=seed)
     terminated = False
     truncated = False
@@ -247,7 +257,8 @@ def _run_eval_episode(model: PPO, env: SATBranchingEnv, seed: int) -> dict:
     final_info = info
 
     while not (terminated or truncated):
-        action, _ = model.predict(observation, deterministic=True)
+        action_masks = env.action_masks()
+        action, _ = model.predict(observation, deterministic=True, action_masks=action_masks)
         observation, reward, terminated, truncated, final_info = env.step(int(action))
         total_reward += float(reward)
 

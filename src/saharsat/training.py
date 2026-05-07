@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 
-from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from saharsat import SATBranchingEnv
+
+POLICY_KWARGS = dict(
+    net_arch=dict(pi=[256, 256, 128], vf=[256, 256, 128]),
+    activation_fn=__import__("torch").nn.Tanh,
+)
+
+DEFAULT_N_ENVS = min(os.cpu_count() or 1, 8)
 
 
 def current_timestamp() -> str:
@@ -26,6 +33,13 @@ def format_timesteps(timesteps: int) -> str:
     return str(timesteps)
 
 
+def linear_schedule(initial_lr: float) -> Callable[[float], float]:
+    """Linear LR decay from initial_lr to 0 over training."""
+    def schedule(progress_remaining: float) -> float:
+        return progress_remaining * initial_lr
+    return schedule
+
+
 @dataclass
 class TrainingConfig:
     data_dir: str = "data/uf20-91"
@@ -33,11 +47,17 @@ class TrainingConfig:
     seed: int = 0
     max_steps: int = 40
     invalid_action_penalty: float = -1.0
-    solved_bonus: float = 100.0
-    failed_penalty: float = -100.0
-    n_steps: int = 512
-    batch_size: int = 64
-    gamma: float = 0.99
+    solved_bonus: float = 10.0
+    failed_penalty: float = -10.0
+    falsified_clause_penalty: float = -0.5
+    unit_clause_bonus: float = 2.0
+    n_steps: int = 2048
+    batch_size: int = 128
+    gamma: float = 1.0
+    learning_rate: float = 3e-4
+    ent_coef: float = 0.02
+    n_envs: int = DEFAULT_N_ENVS
+    lr_decay: bool = True
     model_out: str | None = None
 
 
@@ -104,23 +124,38 @@ def default_model_path(timesteps: int) -> str:
     return f"models/ppo_uf20_91_{format_timesteps(timesteps)}_{current_timestamp()}"
 
 
-def train_ppo(
-    config: TrainingConfig,
-    on_progress: Callable[[TrainingProgress], None] | None = None,
-) -> Path:
-    env = Monitor(
-        SATBranchingEnv(
+def _make_env(config: TrainingConfig, rank: int) -> Callable[[], SATBranchingEnv]:
+    """Factory for a single env instance with a unique seed per subprocess."""
+    def _init() -> SATBranchingEnv:
+        return SATBranchingEnv(
             config.data_dir,
             max_steps=config.max_steps,
             invalid_action_penalty=config.invalid_action_penalty,
             solved_bonus=config.solved_bonus,
             failed_penalty=config.failed_penalty,
-            seed=config.seed,
+            falsified_clause_penalty=config.falsified_clause_penalty,
+            unit_clause_bonus=config.unit_clause_bonus,
+            seed=config.seed + rank,
         )
-    )
-    check_env(env.unwrapped)
+    return _init
 
-    model = PPO(
+
+def train_ppo(
+    config: TrainingConfig,
+    on_progress: Callable[[TrainingProgress], None] | None = None,
+) -> Path:
+    n_envs = max(1, config.n_envs)
+    if n_envs > 1:
+        env = SubprocVecEnv(
+            [_make_env(config, i) for i in range(n_envs)],
+            start_method="spawn",
+        )
+    else:
+        env = _make_env(config, 0)()
+
+    lr = linear_schedule(config.learning_rate) if config.lr_decay else config.learning_rate
+
+    model = MaskablePPO(
         "MlpPolicy",
         env,
         verbose=1,
@@ -128,6 +163,12 @@ def train_ppo(
         n_steps=config.n_steps,
         batch_size=config.batch_size,
         gamma=config.gamma,
+        learning_rate=lr,
+        ent_coef=config.ent_coef,
+        policy_kwargs=POLICY_KWARGS,
+        max_grad_norm=0.5,
+        vf_coef=0.5,
+        n_epochs=10,
     )
 
     callback = None
