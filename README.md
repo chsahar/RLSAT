@@ -1,4 +1,4 @@
-# saharSAT
+# RLSAT
 
 Learning a DPLL branching heuristic with PPO on SATLIB `uf20-91`
 (random 3-SAT, 20 vars / 91 clauses, all satisfiable).
@@ -89,11 +89,11 @@ Configurable via env vars:
 
 | Variable                | Default     | Purpose             |
 |-------------------------|-------------|---------------------|
-| `SAHARSAT_API_HOST`     | `127.0.0.1` | Bind host           |
-| `SAHARSAT_API_PORT`     | `8000`      | Bind port           |
-| `SAHARSAT_API_RELOAD`   | `0`         | `1` for autoreload  |
+| `RLSAT_API_HOST`        | `127.0.0.1` | Bind host           |
+| `RLSAT_API_PORT`        | `8000`      | Bind port           |
+| `RLSAT_API_RELOAD`      | `0`         | `1` for autoreload  |
 
-Endpoints (see [src/saharsat/api.py](src/saharsat/api.py)):
+Endpoints (see [src/rlsat/api.py](src/rlsat/api.py)):
 
 | Method | Path                  | Purpose                                       |
 |--------|-----------------------|-----------------------------------------------|
@@ -126,7 +126,7 @@ VITE_API_BASE=http://127.0.0.1:9000 npm run dev
 ## Layout
 
 ```
-src/saharsat/
+src/rlsat/
   envs.py            # DIMACS loader + Gymnasium env with BCP
   training.py        # TrainingConfig, ProgressCallback, train_ppo()
   model_io.py        # MaskablePPO loader + torch.load shim

@@ -7,8 +7,8 @@ import uvicorn
 
 if __name__ == "__main__":
     uvicorn.run(
-        "saharsat.api:app",
-        host=os.environ.get("SAHARSAT_API_HOST", "127.0.0.1"),
-        port=int(os.environ.get("SAHARSAT_API_PORT", "8000")),
-        reload=os.environ.get("SAHARSAT_API_RELOAD", "0") == "1",
+        "rlsat.api:app",
+        host=os.environ.get("RLSAT_API_HOST", "127.0.0.1"),
+        port=int(os.environ.get("RLSAT_API_PORT", "8000")),
+        reload=os.environ.get("RLSAT_API_RELOAD", "0") == "1",
     )

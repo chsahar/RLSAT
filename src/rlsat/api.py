@@ -12,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sb3_contrib import MaskablePPO
 
-from saharsat import SATBranchingEnv
-from saharsat.model_io import load_ppo_model
-from saharsat.training import DEFAULT_N_ENVS, TrainingConfig, TrainingProgress, train_ppo
+from rlsat import SATBranchingEnv
+from rlsat.model_io import load_ppo_model
+from rlsat.training import DEFAULT_N_ENVS, TrainingConfig, TrainingProgress, train_ppo
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -58,7 +58,7 @@ class JobStatus(BaseModel):
     error: str | None = None
 
 
-app = FastAPI(title="saharSAT API")
+app = FastAPI(title="RLSAT API")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",

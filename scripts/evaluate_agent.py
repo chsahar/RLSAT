@@ -5,8 +5,8 @@ import argparse
 import numpy as np
 from sb3_contrib import MaskablePPO
 
-from saharsat import SATBranchingEnv
-from saharsat.model_io import load_ppo_model
+from rlsat import SATBranchingEnv
+from rlsat.model_io import load_ppo_model
 
 
 def run_episode(model: MaskablePPO, env: SATBranchingEnv, seed: int) -> dict:

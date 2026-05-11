@@ -11,7 +11,7 @@ from sb3_contrib import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-from saharsat import SATBranchingEnv
+from rlsat import SATBranchingEnv
 
 POLICY_KWARGS = dict(
     net_arch=dict(pi=[256, 256, 128], vf=[256, 256, 128]),

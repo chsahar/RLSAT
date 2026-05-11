@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from saharsat.training import DEFAULT_N_ENVS, TrainingConfig, train_ppo
+from rlsat.training import DEFAULT_N_ENVS, TrainingConfig, train_ppo
 
 
 def main() -> None:

@@ -1,5 +1,5 @@
 [project]
-name = "saharsat"
+name = "rlsat"
 version = "0.1.0"
 description = "A small Stable-Baselines3 PPO setup for learning SAT branching policies."
 readme = "README.md"

@@ -182,7 +182,7 @@ function App() {
       <section className="topbar">
         <div>
           <p className="eyebrow">uf20-91 PPO Lab</p>
-          <h1>saharSAT</h1>
+          <h1>RLSAT</h1>
         </div>
         <button className="icon-button" type="button" onClick={() => {
           refreshEnvironment();

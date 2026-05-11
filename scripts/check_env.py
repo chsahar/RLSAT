@@ -4,7 +4,7 @@ import argparse
 
 from gymnasium.utils.env_checker import check_env
 
-from saharsat import SATBranchingEnv
+from rlsat import SATBranchingEnv
 
 
 def main() -> None:
