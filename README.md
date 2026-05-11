@@ -17,7 +17,7 @@ The repo contains:
 Implemented in [src/saharsat/envs.py](src/saharsat/envs.py).
 
 - **One episode = one random SAT instance** sampled from the data directory on `reset()`.
-- **Action space**: `Discrete(num_vars * 2)` — action `2*i` sets `x_{i+1} = False`, `2*i+1` sets `x_{i+1} = True`. With `num_vars=20`, that's `Discrete(40)`.
+- **Action space**: `Discrete(num_vars * 2)`, action `2*i` sets `x_{i+1} = False`, `2*i+1` sets `x_{i+1} = True`. With `num_vars=20`, that's `Discrete(40)`.
 - **Observation** (`Box(-1, 1, shape=(243,), dtype=float32)` for the default `20 vars / 91 clauses`):
   - `num_vars` assignment values: `-1` unassigned, `0` false, `1` true
   - `num_vars` positive pressure: fraction of unsatisfied clauses containing `+x_i`
@@ -32,7 +32,7 @@ Implemented in [src/saharsat/envs.py](src/saharsat/envs.py).
   - `falsified_clause_penalty * (newly falsified clauses)` (default `-0.5`)
   - `invalid_action_penalty` on attempting to assign an already-assigned variable (default `-1.0`)
   - terminal bonus: `+solved_bonus` if all clauses satisfied (default `+10`), else `failed_penalty` (default `-10`)
-  - Note: `unit_clause_bonus` is a knob exposed by the API/CLI/env but currently has no effect on reward — see *Known limitations* below.
+  - Note: `unit_clause_bonus` is a knob exposed by the API/CLI/env but currently has no effect on reward, see *Known limitations* below.
 
 ---
 
@@ -47,7 +47,7 @@ Implemented in [src/saharsat/envs.py](src/saharsat/envs.py).
 
 ## 3. Install (Python)
 
-Use a fresh virtualenv (or your favorite manager — conda, uv, poetry, all fine).
+Use a fresh virtualenv (or your favorite manager, conda, uv, poetry, all fine).
 
 ```bash
 python -m venv .venv
