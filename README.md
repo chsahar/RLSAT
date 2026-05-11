@@ -12,7 +12,7 @@ The repo contains:
 
 ---
 
-## 1. Environment in one paragraph
+## 1. Environment
 
 Implemented in [src/saharsat/envs.py](src/saharsat/envs.py).
 
