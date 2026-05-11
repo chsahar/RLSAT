@@ -27,6 +27,7 @@ models/*.zip
 logs/
 runs/
 tensorboard/
+RLSAT-code.zip
 
 .env
 .env.*
