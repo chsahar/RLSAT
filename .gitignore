@@ -32,6 +32,9 @@ RLSAT-code.zip
 *.log
 .codex
 
+data/*
+!data/.gitkeep
+
 .env
 .env.*
 .DS_Store

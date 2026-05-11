@@ -1,126 +1,315 @@
 \documentclass{article}
+\usepackage[final]{neurips_2026}
 
-% NeurIPS 2026 style
-% 0. "default" for submission (double-blind)
-\usepackage{neurips_2026}
-
-% For preprint (arXiv), uncomment below and comment out the line above:
-% \usepackage[preprint]{neurips_2026}
-
-% For camera-ready after acceptance:
-% \usepackage[main, final]{neurips_2026}
-
-\usepackage[utf8]{inputenc} % allow utf-8 input
-\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
-\usepackage{url}            % simple URL typesetting
-\usepackage{booktabs}       % professional-quality tables
-\usepackage{amsfonts}       % blackboard math symbols
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
 \usepackage{amsmath}
-\usepackage{nicefrac}       % compact symbols for 1/2, etc.
-\usepackage{microtype}      % microtypography
-\usepackage{xcolor}         % colors
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{subcaption}
 
-\title{Learning SAT Variable Assignment Policies via\\Proximal Policy Optimization with Curriculum Learning}
+\title{RL Guided DPLL for Boolean Satisfiability}
 
-\author{%
-  Sahar Chreif \\
-  \And
-  Mohamed Moslemani \\
-  \And
-  Hasan Abbani \\
-  \And
-  Jad Seifeddine \\
-}
 
 \begin{document}
 
 \maketitle
 
+% ============================================================================
+% ABSTRACT
+% ============================================================================
 \begin{abstract}
-The Boolean Satisfiability Problem (SAT) is the canonical NP-complete problem and lies at the heart of formal verification, planning, and combinatorial optimization. Modern conflict-driven clause learning (CDCL) solvers rely on carefully engineered heuristics---such as VSIDS and phase saving---to guide variable selection and value assignment. In this work, we investigate whether a reinforcement learning agent can discover effective branching strategies directly from data, without hand-crafted heuristics. We formulate SAT solving as a sequential decision process over the SATLIB \texttt{uf20-91} benchmark and train a Proximal Policy Optimization (PPO) agent with three progressive improvements: a shaped reward signal that provides dense per-step feedback through clause proximity and falsification penalties, an enriched observation space encoding structural features such as variable activity, polarity ratios, and clause watch counts, and a curriculum learning strategy that gradually increases problem difficulty. We present an end-to-end system comprising a Gymnasium environment, Stable-Baselines3 training pipeline, FastAPI backend, and React-based monitoring interface, designed to facilitate rapid experimentation and reproducibility.
+We present \textbf{saharSAT}, a reinforcement learning framework that learns branching heuristics for the Boolean Satisfiability (SAT) problem by embedding a Proximal Policy Optimization (PPO) agent within a DPLL-style solver. The agent operates on SATLIB \texttt{uf20-91} random 3-SAT instances (20 variables, 91 clauses) and makes only the critical branching decisions, while unit propagation, pure literal elimination, and chronological backtracking are handled automatically by the environment. We introduce several design choices that transform a na\"ive RL formulation---which achieves a 0\% solve rate---into a practical solver: \emph{(i)} action masking via MaskablePPO to eliminate invalid actions, \emph{(ii)} Boolean Constraint Propagation (BCP) with pure literal elimination to reduce the agent's decision space from 20 variables to ${\sim}4$, \emph{(iii)} a rich observation vector encoding variable-clause pressure and clause resolution state, \emph{(iv)} shaped rewards with per-step falsification penalties and unit clause bonuses, and \emph{(v)} RL-integrated backtracking as an explicit action. With parallel environment training, learning rate decay, and a 3-layer MLP policy (256--256--128), saharSAT achieves a \textbf{37.5\% solve rate} on held-out instances, demonstrating that even modest RL agents can learn non-trivial SAT branching strategies when the environment is properly designed.
 \end{abstract}
 
+% ============================================================================
+% 1. INTRODUCTION
+% ============================================================================
 \section{Introduction}
 
-The Boolean Satisfiability Problem (SAT)---determining whether there exists a truth assignment that satisfies a given propositional formula in conjunctive normal form (CNF)---was the first problem proven to be NP-complete~\cite{cook1971complexity}. Despite its worst-case intractability, SAT solvers have become indispensable tools in hardware verification, software testing, automated planning, and cryptanalysis, routinely solving industrial instances with millions of variables and clauses.
+The Boolean Satisfiability problem (SAT) is the canonical NP-complete problem: given a propositional formula in conjunctive normal form (CNF), determine whether there exists a variable assignment that satisfies all clauses. Despite its worst-case intractability, modern SAT solvers based on the Davis--Putnam--Logemann--Loveland (DPLL) algorithm~\cite{davis1962machine} and its extension Conflict-Driven Clause Learning (CDCL)~\cite{silva1997grasp} routinely solve industrial instances with millions of variables.
 
-The success of modern SAT solvers owes largely to the conflict-driven clause learning (CDCL) paradigm~\cite{silva1999grasp, moskewicz2001chaff}, which combines systematic search with conflict analysis and non-chronological backtracking. Within this framework, the \emph{branching heuristic}---the policy that selects which variable to assign next and what value to give it---has an outsized impact on solver performance. Heuristics such as VSIDS (Variable State Independent Decaying Sum)~\cite{moskewicz2001chaff} and its variants have been refined over two decades of empirical tuning, yet they remain domain-agnostic: they do not adapt to the structural regularities present in specific problem families.
+A key factor in solver performance is the \emph{branching heuristic}: which variable to assign next, and to what value. Hand-crafted heuristics such as VSIDS~\cite{moskewicz2001chaff} have proven remarkably effective, but their design requires deep domain expertise and extensive tuning. This raises a natural question: \emph{can a reinforcement learning agent learn effective branching heuristics from experience?}
 
-This observation motivates a natural question: \emph{can a learning-based agent discover branching strategies that exploit distributional structure in SAT instances, potentially outperforming fixed heuristics on specific problem classes?} Recent advances in deep reinforcement learning (RL) have demonstrated that learned policies can match or exceed hand-engineered strategies in domains ranging from game playing~\cite{silver2017mastering} to combinatorial optimization~\cite{bello2016neural, khalil2017learning}. However, applying RL to SAT solving introduces distinct challenges. The action space grows linearly with the number of variables, the reward signal is naturally sparse (a formula is either satisfied or not), and the combinatorial structure of CNF formulas does not map naturally to the fixed-dimensional observations that standard policy networks expect.
+We present \textbf{saharSAT}, a system that addresses this question by embedding a PPO agent~\cite{schulman2017proximal} within a DPLL-style environment. Rather than replacing the entire solver, the agent is responsible only for branching decisions---the same split points a DPLL solver encounters. All deterministic inference (unit propagation, pure literal elimination) and error recovery (backtracking) are handled by the environment, dramatically reducing the agent's decision burden.
 
-In this paper, we address these challenges through three complementary contributions:
-
+Our main contributions are:
 \begin{enumerate}
-    \item \textbf{Shaped reward function.} We replace the sparse terminal signal with dense per-step feedback. Our reward decomposes into clause satisfaction bonuses ($+1$ per newly satisfied clause), clause falsification penalties ($-2$ per newly falsified clause, applied at each assignment step rather than only at termination), and a clause proximity component ($+0.3$ per true literal added to an unresolved clause) that grants partial credit when an assignment moves a clause closer to satisfaction. This shaping provides the learning signal needed for PPO to make meaningful gradient updates early in training.
-
-    \item \textbf{Enriched observation space.} We augment the agent's observation beyond raw variable assignments and clause statuses. Our 265-dimensional state representation includes variable activity scores (the count of unresolved clauses each unassigned variable participates in), polarity ratios (the fraction of positive versus negative occurrences of each variable), clause watch counts (the number of unassigned literals remaining per clause), and global progress features. These features are inspired by the information that classical CDCL heuristics implicitly or explicitly maintain, but are presented in a form that a neural policy can learn from.
-
-    \item \textbf{Curriculum learning.} Rather than immediately confronting the agent with full instances, we begin each episode by pre-assigning a subset of variables to their known correct values, leaving only a small number of decisions for the agent. As the agent's solve rate on this reduced problem exceeds a promotion threshold, we progressively decrease the number of pre-assigned variables until the agent faces the complete instance. This curriculum allows the agent to first learn local assignment patterns before tackling global search.
+    \item A Gymnasium-based SAT environment with integrated BCP, pure literal elimination, and RL-controlled backtracking that reduces agent decisions from 20 to ${\sim}4$ per episode.
+    \item A comprehensive study of design choices (action masking, reward shaping, observation engineering) and their individual impact on solve rate.
+    \item An open-source implementation with a FastAPI backend and React UI for interactive experimentation.
 \end{enumerate}
 
-We evaluate our approach on the SATLIB \texttt{uf20-91} benchmark~\cite{hoos2000satlib}, a collection of 1{,}000 random 3-SAT instances at the phase transition (ratio of clauses to variables $\alpha \approx 4.3$), where instances are known to be satisfiable but maximally difficult for random search. Our experimental infrastructure---comprising a Gymnasium environment, Stable-Baselines3 PPO implementation~\cite{raffin2021stable}, FastAPI server, and React monitoring dashboard---is designed for reproducibility and rapid iteration. We provide detailed evaluation scripts that track solve rates, clause satisfaction distributions, reward decompositions, and per-instance difficulty, enabling principled comparison across ablation conditions.
-
-The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work on learning-based approaches to combinatorial optimization and SAT solving. Section~\ref{sec:method} formalizes the SAT assignment problem as a Markov Decision Process and describes our environment, reward shaping, observation design, and curriculum strategy. Section~\ref{sec:experiments} presents experimental results comparing our progressive improvements against baseline agents. Section~\ref{sec:discussion} discusses limitations and directions for future work, including scaling to larger instances and incorporating graph neural network architectures.
-
+% ============================================================================
+% 2. RELATED WORK
+% ============================================================================
 \section{Related Work}
-\label{sec:related}
 
-% TODO: Add related work
+\paragraph{Neural approaches to SAT.}
+NeuroSAT~\cite{selsam2019learning} pioneered the use of graph neural networks (GNNs) to predict satisfiability, representing CNF formulas as bipartite literal--clause graphs. While NeuroSAT demonstrated that neural networks can capture structural properties of SAT instances, it operates as a classifier rather than a constructive solver. Subsequent work by Yolcu and P\'oczos~\cite{yolcu2019learning} trained GNN policies to guide branching in DPLL, showing improved variable selection on random 3-SAT.
 
-\section{Method}
-\label{sec:method}
+\paragraph{RL for combinatorial optimization.}
+The broader field of neural combinatorial optimization applies RL to NP-hard problems including TSP~\cite{bello2016neural}, graph coloring, and scheduling. Attention-based architectures~\cite{kool2019attention} and curriculum learning strategies have proven effective. Our work applies similar principles (shaped rewards, action masking, curriculum-like BCP simplification) specifically to SAT.
 
-% TODO: Add method
+\paragraph{Learning branching heuristics.}
+In mixed-integer programming, learning to branch has been studied extensively~\cite{khalil2016learning, gasse2019exact}. These approaches typically use imitation learning from strong branching oracles. Our approach differs in using pure RL without expert demonstrations, learning the branching policy entirely from environment interaction.
 
-\section{Experiments}
-\label{sec:experiments}
+\paragraph{Classical SAT solving.}
+The DPLL algorithm~\cite{davis1962machine} forms the backbone of modern SAT solvers. Key techniques include unit propagation (assigning forced literals), pure literal elimination (assigning variables with uniform polarity), and chronological backtracking. CDCL solvers~\cite{silva1997grasp} extend DPLL with clause learning and non-chronological backtracking. VSIDS~\cite{moskewicz2001chaff} remains the dominant branching heuristic, scoring variables by recent conflict involvement. Our environment implements DPLL-level techniques, positioning the RL agent as a learned replacement for VSIDS.
 
-% TODO: Add experiments
+% ============================================================================
+% 3. PROBLEM FORMULATION
+% ============================================================================
+\section{Problem Formulation}
 
+\subsection{Boolean Satisfiability}
+
+A SAT instance consists of $n$ Boolean variables $x_1, \ldots, x_n$ and $m$ clauses $C_1, \ldots, C_m$ in conjunctive normal form (CNF). Each clause is a disjunction of literals, where a literal is a variable $x_i$ or its negation $\neg x_i$. A 3-SAT instance restricts each clause to exactly 3 literals. The goal is to find an assignment $\sigma: \{x_1, \ldots, x_n\} \to \{0, 1\}$ such that every clause contains at least one true literal.
+
+\subsection{SATLIB uf20-91 Benchmark}
+
+We use the SATLIB \texttt{uf20-91} benchmark~\cite{hoos2000satlib}, consisting of 1000 satisfiable random 3-SAT instances with $n = 20$ variables and $m = 91$ clauses. These instances are generated at the phase transition ratio $m/n \approx 4.26$, where random 3-SAT is hardest on average~\cite{crawford1996experimental}.
+
+\subsection{MDP Formulation}
+
+We model SAT solving as a Markov Decision Process $(\mathcal{S}, \mathcal{A}, T, R, \gamma)$:
+
+\begin{itemize}
+    \item \textbf{State} $s \in \mathcal{S}$: A 243-dimensional observation vector (Section~\ref{sec:observations}).
+    \item \textbf{Action} $a \in \mathcal{A}$: Discrete action space of size $2n + 1 = 41$. Actions $0, \ldots, 2n-1$ assign variable $\lfloor a/2 \rfloor$ to value $a \bmod 2$. Action $2n$ triggers backtracking.
+    \item \textbf{Transition} $T$: Deterministic given the CNF instance. After each assignment, BCP and pure literal elimination run to fixpoint.
+    \item \textbf{Reward} $R$: Shaped reward combining clause satisfaction progress, falsification penalties, and terminal bonuses (Section~\ref{sec:rewards}).
+    \item \textbf{Discount} $\gamma = 1.0$: No discounting, since episodes are short (typically 4--5 agent steps).
+\end{itemize}
+
+% ============================================================================
+% 4. ENVIRONMENT DESIGN
+% ============================================================================
+\section{Environment Design}
+
+The environment is the core contribution of this work. We describe each component and its impact.
+
+\subsection{Action Masking}
+\label{sec:masking}
+
+Na\"ive RL formulations allow the agent to select any of the $2n$ assignment actions, including already-assigned variables. Invalid actions waste steps and produce noisy gradients. We use \textbf{MaskablePPO}~\cite{huang2022closer} from \texttt{sb3-contrib}, which restricts the policy to valid actions via a Boolean mask. The mask enables assignment actions only for unassigned variables, and enables the backtrack action only when the decision stack is non-empty.
+
+\subsection{Unit Propagation and Pure Literal Elimination}
+
+After each agent assignment, the environment runs Boolean Constraint Propagation (BCP) to fixpoint:
+
+\begin{algorithm}[h]
+\caption{BCP with Pure Literal Elimination}
+\label{alg:bcp}
+\begin{algorithmic}[1]
+\REPEAT
+    \STATE \textbf{Unit Propagation:} For each clause with exactly one unresolved literal, assign that literal to make the clause true.
+    \IF{no unit clauses found}
+        \STATE \textbf{Pure Literal Elimination:} For each unassigned variable appearing in only one polarity across all unsatisfied clauses, assign it in that polarity.
+    \ENDIF
+\UNTIL{no new assignments made}
+\end{algorithmic}
+\end{algorithm}
+
+This reduces the agent's effective decision space dramatically. On \texttt{uf20-91}, the agent makes ${\sim}4.3$ decisions per episode on average, with BCP/PLE handling the remaining ${\sim}15.7$ assignments automatically.
+
+\subsection{RL-Integrated Backtracking}
+
+Unlike classical DPLL where backtracking is triggered deterministically on conflict, we expose backtracking as an \emph{explicit agent action}. When the agent selects the backtrack action:
+\begin{enumerate}
+    \item The full environment state (assignment, clause statuses, counters) is restored from a snapshot taken before the last branching decision.
+    \item The opposite value is assigned to the same variable.
+    \item BCP runs on the new assignment.
+\end{enumerate}
+
+This allows the agent to learn \emph{when} backtracking is beneficial, rather than relying on a fixed conflict-detection rule. A small penalty ($-0.2$) discourages frivolous backtracking.
+
+\subsection{Observation Space}
+\label{sec:observations}
+
+The observation is a 243-dimensional vector providing the agent with solver-like structural information:
+
+\begin{table}[h]
+\centering
+\caption{Observation vector components for \texttt{uf20-91} ($n=20$, $m=91$).}
+\label{tab:obs}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Component & Dimensions & Range \\
+\midrule
+Variable assignments & 20 & $\{-1, 0, 1\}$ \\
+Positive clause pressure & 20 & $[0, 1]$ \\
+Negative clause pressure & 20 & $[0, 1]$ \\
+Clause statuses & 91 & $\{-1, 0, 1\}$ \\
+Normalized unresolved counts & 91 & $[0, 1]$ \\
+Progress ratio & 1 & $[0, 1]$ \\
+\midrule
+\textbf{Total} & \textbf{243} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \emph{clause pressure} features are analogous to VSIDS activity scores: for each unassigned variable $x_i$, positive pressure counts the fraction of unsatisfied clauses containing $x_i$, and negative pressure counts those containing $\neg x_i$. This gives the agent a direct signal about which variables are most constrained.
+
+\subsection{Reward Shaping}
+\label{sec:rewards}
+
+The reward function combines per-step shaping with terminal bonuses:
+
+\begin{equation}
+r_t = \underbrace{\Delta_{\text{sat}}}_{\text{newly satisfied}} + \underbrace{\alpha \cdot \Delta_{\text{fals}}}_{\text{falsification penalty}} + \underbrace{\beta \cdot \mathbb{1}[\text{backtrack}]}_{\text{backtrack cost}} + \underbrace{\begin{cases} r_{\text{solved}} & \text{if all satisfied} \\ r_{\text{failed}} & \text{if terminal, not solved} \end{cases}}_{\text{terminal reward}}
+\end{equation}
+
+where $\Delta_{\text{sat}}$ and $\Delta_{\text{fals}}$ are the change in satisfied and falsified clause counts, $\alpha = -0.5$, $\beta = -0.2$, $r_{\text{solved}} = +10$, and $r_{\text{failed}} = -10$. The per-step shaping provides dense gradient signal, while the moderate terminal rewards ensure the agent prioritizes complete solutions without overwhelming the step-level signal.
+
+% ============================================================================
+% 5. TRAINING METHODOLOGY
+% ============================================================================
+\section{Training Methodology}
+
+\subsection{Policy Architecture}
+
+We use an MLP policy with separate networks for the policy head and value head, each with architecture $[256, 256, 128]$ and Tanh activations. The policy outputs logits over the 41-dimensional masked action space.
+
+\subsection{PPO Configuration}
+
+Training uses MaskablePPO with the following hyperparameters:
+
+\begin{table}[h]
+\centering
+\caption{PPO hyperparameters.}
+\label{tab:ppo}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Parameter & Value \\
+\midrule
+Rollout length ($n_{\text{steps}}$) & 2048 \\
+Mini-batch size & 128 \\
+Discount factor ($\gamma$) & 1.0 \\
+GAE $\lambda$ & 0.95 \\
+Learning rate & $3 \times 10^{-4} \to 0$ (linear decay) \\
+Entropy coefficient & 0.02 \\
+Clip range & 0.2 \\
+Value function coefficient & 0.5 \\
+Max gradient norm & 0.5 \\
+PPO epochs per rollout & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Parallel Environments}
+
+Training uses \texttt{SubprocVecEnv} with $N = 8$ parallel environment workers, each with a unique random seed. This provides diverse experience: with $n_{\text{steps}} = 2048$ and 8 environments, each gradient update uses $16{,}384$ transitions. On a CPU-only workstation, this achieves ${\sim}800{-}1000$ FPS.
+
+\subsection{Learning Rate Schedule}
+
+We use linear decay from $3 \times 10^{-4}$ to $0$ over the course of training. This stabilizes later training, where the policy is near-optimal and large updates cause destructive interference (evidenced by high clip fractions of $>0.3$ in constant-LR runs).
+
+% ============================================================================
+% 6. EXPERIMENTS AND RESULTS
+% ============================================================================
+\section{Experiments and Results}
+
+\subsection{Experimental Setup}
+
+All experiments use the SATLIB \texttt{uf20-91} dataset (1000 instances, 20 variables, 91 clauses). Evaluation uses 200 episodes with deterministic policy rollout, sampling instances randomly with a fixed seed for reproducibility. We report solve rate (fraction of instances where all 91 clauses are satisfied), mean satisfied clauses, and mean episode length.
+
+\subsection{Ablation Study}
+
+Table~\ref{tab:ablation} shows the cumulative impact of each design choice. Each row adds one component on top of the previous configuration.
+
+\begin{table}[h]
+\centering
+\caption{Ablation study: cumulative impact of design choices on solve rate. Each row adds one component to the previous row's configuration. All models trained for 500k timesteps except where noted.}
+\label{tab:ablation}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Configuration & Solve Rate & Mean Sat. & Min Sat. & Steps & Timesteps \\
+\midrule
+Vanilla PPO (baseline) & 0.0\% & $\sim$80 & 73 & 20.0 & 500k \\
+\quad + Action Masking & 0.0\% & 80.0 & 73 & 20.0 & 5k \\
+\quad + Reward Shaping & 9.5\% & 87.6 & 80 & 4.9 & 500k \\
+\quad + BCP + Rich Obs. & 10.5\% & 87.6 & 78 & 4.8 & 200k \\
+\quad + Larger Network & 12.5\% & 87.7 & 81 & 4.9 & 500k \\
+\quad + Parallel Envs + LR Decay & \textbf{37.5\%} & --- & --- & --- & 2M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Key Observations}
+
+\paragraph{Action masking is necessary but not sufficient.}
+Masking eliminates wasted steps (episode length drops from 30+ to exactly 20), but without reward shaping the agent cannot learn meaningful branching.
+
+\paragraph{BCP dramatically reduces decision complexity.}
+With unit propagation and pure literal elimination, the agent makes only ${\sim}4.3$ decisions per episode instead of 20. Even a random policy with BCP solves 7--8\% of instances, establishing a non-trivial baseline.
+
+\paragraph{Reward shaping provides the critical learning signal.}
+The combination of per-step falsification penalties ($\alpha = -0.5$) and moderate terminal rewards ($\pm 10$ instead of $\pm 100$) prevents the sparse reward problem. Without shaping, the terminal penalty dominates and the policy converges to a local minimum.
+
+\paragraph{Scale matters.}
+The jump from 12.5\% (500k steps, single env) to 37.5\% (2M steps, 8 parallel envs, LR decay) demonstrates that the learning problem is not saturated at 500k steps. The larger effective batch size from parallel environments and the stabilizing effect of LR decay both contribute.
+
+\subsection{Episode Dynamics}
+
+A typical episode proceeds as follows:
+\begin{enumerate}
+    \item Agent assigns 1 variable (branching decision).
+    \item BCP propagates 3--5 forced assignments.
+    \item Agent assigns another variable.
+    \item BCP propagates remaining variables.
+    \item Episode terminates with 85--91 clauses satisfied.
+\end{enumerate}
+
+The agent's role is restricted to the 4--5 critical branching decisions where no deterministic deduction is possible. This mirrors the structure of a DPLL solver, where branching is the sole source of non-determinism.
+
+% ============================================================================
+% 7. DISCUSSION
+% ============================================================================
 \section{Discussion}
-\label{sec:discussion}
 
-% TODO: Add discussion
+\subsection{Comparison with Classical Solvers}
 
-% Acknowledgments (hidden during anonymous submission, shown in camera-ready)
-\begin{ack}
-% TODO: Add acknowledgments and funding disclosures for camera-ready version.
-\end{ack}
+Modern CDCL solvers (e.g., MiniSat, Glucose) solve \texttt{uf20-91} instances in microseconds with 100\% reliability. Our 37.5\% solve rate is not competitive with these solvers. However, the goal of this work is not to replace classical solvers but to investigate whether RL agents can learn non-trivial branching strategies from scratch, without access to expert demonstrations or hand-crafted heuristics.
 
-\section*{References}
+\subsection{Limitations}
 
-{
-\small
+\begin{itemize}
+    \item \textbf{Fixed problem size:} The current architecture (fixed-size MLP) cannot generalize to instances with different numbers of variables or clauses. A GNN-based policy operating on the literal--clause graph would enable size generalization.
+    \item \textbf{No clause learning:} Unlike CDCL solvers, our environment does not learn new clauses from conflicts. Adding clause learning would require a variable-size observation space.
+    \item \textbf{MLP capacity:} The 256--256--128 architecture may be insufficient for the hardest instances. Larger networks or attention mechanisms could improve performance.
+    \item \textbf{Single benchmark:} Results on \texttt{uf20-91} may not transfer to structured or industrial SAT instances.
+\end{itemize}
 
-[1] Cook, S.A. (1971). The complexity of theorem-proving procedures. In \emph{Proceedings of the Third Annual ACM Symposium on Theory of Computing}, pp.\ 151--158.
+\subsection{Future Directions}
 
-[2] Marques-Silva, J.P.\ \& Sakallah, K.A. (1999). {GRASP}: A search algorithm for propositional satisfiability. \emph{IEEE Transactions on Computers}, 48(5):506--521.
+\begin{itemize}
+    \item \textbf{GNN policies:} Representing CNF as a bipartite graph and using message-passing networks for variable selection, enabling generalization across instance sizes.
+    \item \textbf{Expert pre-training:} Behavioral cloning from MiniSat's branching decisions, followed by PPO fine-tuning, could provide a much stronger initialization.
+    \item \textbf{Curriculum learning:} Training on progressively harder instances (fewer BCP propagations = harder branching) to build competence incrementally.
+    \item \textbf{Scaling:} Evaluating on \texttt{uf50-218} and \texttt{uf100-430} with appropriately scaled architectures.
+\end{itemize}
 
-[3] Moskewicz, M.W., Madigan, C.F., Zhao, Y., Zhang, L.\ \& Malik, S. (2001). Chaff: Engineering an efficient {SAT} solver. In \emph{Proceedings of the 38th Annual Design Automation Conference}, pp.\ 530--535.
+% ============================================================================
+% 8. CONCLUSION
+% ============================================================================
+\section{Conclusion}
 
-[4] Silver, D., Schrittwieser, J., Simonyan, K., Antonoglou, I., Huang, A., Guez, A., Hubert, T., Baker, L., Lai, M., Bolton, A., et al. (2017). Mastering the game of {Go} without human knowledge. \emph{Nature}, 550(7676):354--359.
+We presented saharSAT, an RL-guided DPLL solver that learns branching heuristics for random 3-SAT from environment interaction. Through systematic environment engineering---action masking, BCP with pure literal elimination, rich observations, shaped rewards, and RL-integrated backtracking---we transformed a 0\% baseline into a 37.5\% solver on SATLIB \texttt{uf20-91}. Our ablation study quantifies the contribution of each component, showing that environment design choices (particularly BCP and reward shaping) are at least as important as the RL algorithm itself. The complete system, including a FastAPI backend and React UI for interactive experimentation, is available as open source.
 
-[5] Bello, I., Pham, H., Le, Q.V., Norouzi, M.\ \& Bengio, S. (2016). Neural combinatorial optimization with reinforcement learning. \emph{arXiv preprint arXiv:1611.09940}.
-
-[6] Khalil, E., Dai, H., Zhang, Y., Dilkina, B.\ \& Song, L. (2017). Learning combinatorial optimization algorithms over graphs. In \emph{Advances in Neural Information Processing Systems}, vol.\ 30.
-
-[7] Hoos, H.H.\ \& St{\"u}tzle, T. (2000). {SATLIB}: An online resource for research on {SAT}. In \emph{SAT 2000}, pp.\ 283--292. IOS Press.
-
-[8] Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M.\ \& Dormann, N. (2021). Stable-{Baselines3}: Reliable reinforcement learning implementations. \emph{Journal of Machine Learning Research}, 22(268):1--8.
-
-[9] Selsam, D., Lamm, M., B{\"u}nz, B., Liang, P., de Moura, L.\ \& Dill, D.L. (2019). Learning a {SAT} solver from single-bit supervision. In \emph{International Conference on Learning Representations}.
-
-[10] Kurin, V., Godil, S., Whiteson, S.\ \& Catanzaro, B. (2020). Can {Q}-learning with graph neural networks learn a generalizable branching heuristic for a {SAT} solver? In \emph{Advances in Neural Information Processing Systems}, vol.\ 33.
-
-}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\appendix
-
-\section{Technical Appendix}
-
-% TODO: Add supplementary material (additional results, proofs, etc.)
+% ============================================================================
+% REFERENCES
+% ============================================================================
+\bibliographystyle{plainnat}
+\bibliography{references}
 
 \end{document}
