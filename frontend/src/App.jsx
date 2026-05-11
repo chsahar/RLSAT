@@ -29,7 +29,6 @@ const initialConfig = {
     solved_bonus: 10,
     failed_penalty: -10,
     falsified_clause_penalty: -0.5,
-    unit_clause_bonus: 2,
   },
 };
 
@@ -228,7 +227,6 @@ function App() {
             <NumberField label="Solved bonus" value={config.rewards.solved_bonus} step={5} onChange={(value) => updateReward("solved_bonus", value)} />
             <NumberField label="Failed penalty" value={config.rewards.failed_penalty} step={5} onChange={(value) => updateReward("failed_penalty", value)} />
             <NumberField label="Falsified clause" value={config.rewards.falsified_clause_penalty} step={0.1} onChange={(value) => updateReward("falsified_clause_penalty", value)} />
-            <NumberField label="Unit clause" value={config.rewards.unit_clause_bonus} step={0.25} onChange={(value) => updateReward("unit_clause_bonus", value)} />
           </div>
 
           <label className="toggle-row">

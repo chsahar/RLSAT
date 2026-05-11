@@ -24,7 +24,6 @@ class RewardConfig(BaseModel):
     solved_bonus: float = 10.0
     failed_penalty: float = -10.0
     falsified_clause_penalty: float = -0.5
-    unit_clause_bonus: float = 2.0
 
 
 class TrainRequest(BaseModel):
@@ -157,7 +156,6 @@ def evaluate(request: EvalRequest) -> dict:
         solved_bonus=request.rewards.solved_bonus,
         failed_penalty=request.rewards.failed_penalty,
         falsified_clause_penalty=request.rewards.falsified_clause_penalty,
-        unit_clause_bonus=request.rewards.unit_clause_bonus,
         seed=request.seed,
     )
     model_path = resolve_project_path(request.model)
@@ -222,7 +220,6 @@ def _run_training_job(job_id: str, request: TrainRequest) -> None:
                 solved_bonus=request.rewards.solved_bonus,
                 failed_penalty=request.rewards.failed_penalty,
                 falsified_clause_penalty=request.rewards.falsified_clause_penalty,
-                unit_clause_bonus=request.rewards.unit_clause_bonus,
                 n_steps=request.n_steps,
                 batch_size=request.batch_size,
                 gamma=request.gamma,

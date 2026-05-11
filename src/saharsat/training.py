@@ -50,7 +50,6 @@ class TrainingConfig:
     solved_bonus: float = 10.0
     failed_penalty: float = -10.0
     falsified_clause_penalty: float = -0.5
-    unit_clause_bonus: float = 2.0
     n_steps: int = 2048
     batch_size: int = 128
     gamma: float = 1.0
@@ -94,13 +93,17 @@ class ProgressCallback(BaseCallback):
         self.on_progress(self._progress())
 
     def _progress(self) -> TrainingProgress:
+        mean_reward = self._mean_episode_info("r")
+        if mean_reward is None:
+            mean_reward = self._safe_float("rollout/ep_rew_mean")
+        mean_length = self._mean_episode_info("l")
+        if mean_length is None:
+            mean_length = self._safe_float("rollout/ep_len_mean")
         return TrainingProgress(
             total_timesteps=self.total_timesteps,
             current_timesteps=self.num_timesteps,
-            last_mean_reward=self._mean_episode_info("r")
-            or self._safe_float("rollout/ep_rew_mean"),
-            last_mean_episode_length=self._mean_episode_info("l")
-            or self._safe_float("rollout/ep_len_mean"),
+            last_mean_reward=mean_reward,
+            last_mean_episode_length=mean_length,
         )
 
     def _mean_episode_info(self, key: str) -> float | None:
@@ -134,7 +137,6 @@ def _make_env(config: TrainingConfig, rank: int) -> Callable[[], SATBranchingEnv
             solved_bonus=config.solved_bonus,
             failed_penalty=config.failed_penalty,
             falsified_clause_penalty=config.falsified_clause_penalty,
-            unit_clause_bonus=config.unit_clause_bonus,
             seed=config.seed + rank,
         )
     return _init

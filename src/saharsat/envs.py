@@ -105,10 +105,6 @@ class SATBranchingEnv(gym.Env):
 
     metadata = {"render_modes": ["human"]}
 
-    OBS_SIZE_PER_INSTANCE = staticmethod(
-        lambda nv, nc: nv + nv + nv + nc + nc + 1
-    )
-
     def __init__(
         self,
         data_dir: str | Path,
@@ -119,7 +115,6 @@ class SATBranchingEnv(gym.Env):
         solved_bonus: float = 10.0,
         failed_penalty: float = -10.0,
         falsified_clause_penalty: float = -0.5,
-        unit_clause_bonus: float = 2.0,
         seed: int | None = None,
     ) -> None:
         super().__init__()
@@ -130,7 +125,6 @@ class SATBranchingEnv(gym.Env):
         self.solved_bonus = solved_bonus
         self.failed_penalty = failed_penalty
         self.falsified_clause_penalty = falsified_clause_penalty
-        self.unit_clause_bonus = unit_clause_bonus
 
         self.instances = load_cnf_directory(data_dir)
         self._validate_instances()
@@ -412,31 +406,3 @@ class SATBranchingEnv(gym.Env):
             unresolved_obs,
             progress,
         ])
-
-    def _update_clause_statuses(self) -> None:
-        """Full recompute — only used if needed for debugging."""
-        assert self.instance is not None
-        assigned_values = self.assignment[self.instance.variable_indices]
-        assigned_literals = assigned_values != -1
-        true_literals = assigned_literals & np.where(
-            self.instance.literal_is_positive,
-            assigned_values == 1,
-            assigned_values == 0,
-        )
-        satisfied_clauses = np.any(true_literals, axis=1)
-        falsified_clauses = np.all(assigned_literals, axis=1) & ~satisfied_clauses
-
-        self.clause_statuses.fill(0)
-        self.clause_statuses[satisfied_clauses] = 1
-        self.clause_statuses[falsified_clauses] = -1
-        self.satisfied_count = int(np.count_nonzero(satisfied_clauses))
-        self.falsified_count = int(np.count_nonzero(falsified_clauses))
-
-        n_unresolved = np.sum(~assigned_literals, axis=1)
-        self.unresolved_counts = n_unresolved.astype(np.int8)
-
-    def _count_satisfied_clauses(self) -> int:
-        return self.satisfied_count
-
-    def _all_clauses_satisfied(self) -> bool:
-        return self.satisfied_count == self.num_clauses

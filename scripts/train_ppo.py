@@ -15,7 +15,6 @@ def main() -> None:
     parser.add_argument("--solved-bonus", type=float, default=10.0)
     parser.add_argument("--failed-penalty", type=float, default=-10.0)
     parser.add_argument("--falsified-clause-penalty", type=float, default=-0.5)
-    parser.add_argument("--unit-clause-bonus", type=float, default=2.0)
     parser.add_argument("--n-envs", type=int, default=DEFAULT_N_ENVS)
     parser.add_argument("--no-lr-decay", action="store_true")
     parser.add_argument("--model-out", default=None)
@@ -31,7 +30,6 @@ def main() -> None:
             solved_bonus=args.solved_bonus,
             failed_penalty=args.failed_penalty,
             falsified_clause_penalty=args.falsified_clause_penalty,
-            unit_clause_bonus=args.unit_clause_bonus,
             n_envs=args.n_envs,
             lr_decay=not args.no_lr_decay,
             model_out=args.model_out,
