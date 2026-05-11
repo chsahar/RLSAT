@@ -24,10 +24,13 @@ yarn-error.log*
 pnpm-debug.log*
 
 models/*.zip
+**/models/*.zip
 logs/
 runs/
 tensorboard/
 RLSAT-code.zip
+*.log
+.codex
 
 .env
 .env.*
